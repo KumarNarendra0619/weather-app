@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weather App</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --text: #1b1f24;
+      --muted: #5b6572;
+      --border: #d9e1ea;
+      --accent: #3b82f6;
+      --accent-soft: rgba(59, 130, 246, 0.12);
+      --shadow: 0 10px 28px rgba(22, 28, 36, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1319; --surface: #171d25; --text: #ebeff4;
+        --muted: #a5b0bd; --border: #273240; --accent: #60a5fa;
+        --accent-soft: rgba(96,165,250,0.16); --shadow: 0 12px 30px rgba(0,0,0,0.35);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: start center;
+      padding: 24px 16px;
+      font: 15px/1.5 "Inter","Segoe UI",Roboto,Arial,sans-serif;
+      background: radial-gradient(circle at 20% 0, var(--accent-soft), transparent 35%), var(--bg);
+      color: var(--text);
+    }
+    .app {
+      width: min(100%, 700px); background: var(--surface);
+      border: 1px solid var(--border); border-radius: 16px;
+      box-shadow: var(--shadow); overflow: hidden;
+    }
+    .header { padding: 18px 20px; border-bottom: 1px solid var(--border); }
+    h1 { margin: 0 0 12px; font-size: 1.3rem; line-height: 1.2; }
+    h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 650; }
+    .search { display: grid; grid-template-columns: 1fr auto auto; gap: 9px; margin-bottom: 10px; }
+    input, button {
+      font: inherit; border-radius: 10px; border: 1px solid var(--border);
+      padding: 8px 12px; color: var(--text);
+      background: color-mix(in srgb, var(--surface) 94%, var(--accent-soft));
+    }
+    input:focus, button:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button {
+      cursor: pointer;
+      background: linear-gradient(160deg, var(--accent), color-mix(in srgb, var(--accent), #fff 20%));
+      color: #fff; border: none; font-weight: 600; min-width: 88px;
+    }
+    button.ghost {
+      background: color-mix(in srgb, var(--surface) 94%, var(--accent-soft));
+      border: 1px solid var(--border); color: var(--text); min-width: 0; padding-inline: 11px;
+    }
+    .chip {
+      border-radius: 999px; border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 90%, var(--accent-soft));
+      color: var(--text); padding: 5px 11px; cursor: pointer; font: inherit;
+    }
+    .controls { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .unit-toggle {
+      display: inline-flex; border: 1px solid var(--border); border-radius: 999px;
+      padding: 2px; background: color-mix(in srgb, var(--surface) 94%, var(--accent-soft));
+    }
+    .unit-toggle button { min-width: 0; padding: 5px 11px; border: none; border-radius: 999px; background: transparent; color: var(--text); font-weight: 600; }
+    .unit-toggle button.active { background: var(--accent); color: #fff; }
+    .export-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+    .export-actions .chip, .digipin .chip { padding: 5px 10px; font-size: 0.88rem; }
+    .recent { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 7px; min-height: 28px; }
+
+    /* ── Content layout ── */
+    .content { padding: 18px 20px; display: grid; gap: 14px; }
+
+    /* Current card */
+    .current {
+      background: var(--accent-soft);
+      border: 1px solid color-mix(in srgb, var(--accent), var(--border) 60%);
+      border-radius: 12px; padding: 14px;
+    }
+    .current-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .city { margin: 0; font-size: 1.1rem; font-weight: 650; }
+    .weather-icon { font-size: 1.5rem; line-height: 1; display: inline-block; filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--accent), transparent 65%)); }
+    .temp { margin: 0; font-size: 2.2rem; font-weight: 700; line-height: 1.1; }
+    .meta { margin: 2px 0 0; color: var(--muted); font-size: 0.93rem; }
+    .digipin { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; }
+
+    /* Parameter tiles */
+    .params-panel { }
+    .params-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 9px;
+    }
+    .tile {
+      background: color-mix(in srgb, var(--surface) 88%, var(--accent-soft));
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 12px; display: flex; flex-direction: column; gap: 2px;
+    }
+    .tile-icon { font-size: 1.15rem; margin-bottom: 2px; }
+    .tile-label { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .tile-value { font-size: 1.05rem; font-weight: 700; margin: 0; }
+    .tile-sub { font-size: 0.8rem; color: var(--muted); }
+
+    /* Forecast */
+    .forecast { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 9px; }
+    .card { border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: color-mix(in srgb, var(--surface) 90%, var(--accent-soft)); display: grid; gap: 3px; text-align: center; }
+    .card .day { font-weight: 650; font-size: 0.93rem; }
+    .card .icon { font-size: 1.2rem; margin: 2px 0; display: inline-block; }
+    .card .range { font-weight: 600; font-size: 0.9rem; }
+    .card .card-meta { font-size: 0.78rem; color: var(--muted); }
+
+    /* Map */
+    .map-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: color-mix(in srgb, var(--surface) 92%, var(--accent-soft)); }
+    .map-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .map-title { margin: 0; font-size: 1rem; font-weight: 650; }
+    .map-controls { display: inline-flex; align-items: center; gap: 5px; }
+    .map-controls button { min-width: 0; padding: 4px 9px; }
+    .zoom-label { font-size: 0.85rem; color: var(--muted); min-width: 48px; text-align: center; }
+    .map-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .map-tab { border-radius: 999px; border: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 90%, var(--accent-soft)); color: var(--text); padding: 5px 10px; font: inherit; cursor: pointer; }
+    .map-tab.active { background: var(--accent); color: #fff; border-color: color-mix(in srgb, var(--accent), var(--border) 30%); }
+    .map-frame { width: 100%; height: 240px; border: 1px solid var(--border); border-radius: 10px; background: #e8eef6; display: block; }
+    .map-link { margin-top: 7px; font-size: 0.86rem; color: var(--muted); }
+    .map-link a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+    .status { color: var(--muted); font-size: 0.88rem; min-height: 1.2em; }
+
+    /* Animations */
+    .anim-float { animation: float 3.2s ease-in-out infinite; }
+    .anim-drift { animation: drift 4.2s ease-in-out infinite; }
+    .anim-rain  { animation: rain  1.8s ease-in-out infinite; }
+    .anim-snow  { animation: snow  2.8s ease-in-out infinite; }
+    .anim-storm { animation: storm 1.6s ease-in-out infinite; }
+    @keyframes float  { 0%,100%{transform:translateY(0)}  50%{transform:translateY(-3px)} }
+    @keyframes drift  { 0%,100%{transform:translateX(0);opacity:1} 50%{transform:translateX(2px);opacity:.85} }
+    @keyframes rain   { 0%,100%{transform:translateY(0)}  50%{transform:translateY(2px)} }
+    @keyframes snow   { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(2px) rotate(-7deg)} }
+    @keyframes storm  { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-1px)} 75%{transform:translateX(1px)} }
+    @media (prefers-reduced-motion: reduce) {
+      .anim-float,.anim-drift,.anim-rain,.anim-snow,.anim-storm { animation: none; }
+    }
+  </style>
+</head>
+<body>
+<main class="app">
+  <header class="header">
+    <h1>🌍 Weather by City</h1>
+    <form class="search" id="search-form" autocomplete="off">
+      <input id="city-input" name="city" type="search" placeholder="Search a city…" aria-label="City">
+      <button type="submit">Search</button>
+      <button id="location-btn" class="ghost" type="button" title="Use your location">📍 Locate</button>
+    </form>
+    <div class="controls">
+      <div class="unit-toggle" role="group" aria-label="Temperature unit">
+        <button id="unit-c" type="button">°C</button>
+        <button id="unit-f" type="button">°F</button>
+      </div>
+      <div class="export-actions" role="group" aria-label="Export weather data">
+        <button id="export-fast"    class="chip" type="button">⚡ Fast export</button>
+        <button id="export-daily"   class="chip" type="button">Daily CSV</button>
+        <button id="export-monthly" class="chip" type="button">Monthly CSV</button>
+        <button id="export-annual"  class="chip" type="button">Annual CSV</button>
+      </div>
+    </div>
+    <div class="recent" id="recent-searches" aria-label="Recent searches"></div>
+  </header>
+
+  <section class="content">
+    <!-- Current conditions -->
+    <article class="current" id="current-card">
+      <div class="current-head">
+        <p class="city" id="city-name">Tokyo</p>
+        <span class="weather-icon anim-float" id="current-icon" aria-hidden="true">☀️</span>
+      </div>
+      <p class="temp" id="current-temp">--°C</p>
+      <p class="meta" id="current-summary">Loading…</p>
+      <div class="digipin">
+        <button id="digipin-btn" class="chip" type="button">🔢 DigiPIN</button>
+        <span class="meta" id="digipin-value">DigiPIN: --</span>
+        <span class="meta" id="location-accuracy">GPS: --</span>
+        <span class="meta" id="accuracy-score">Accuracy: --</span>
+      </div>
+    </article>
+
+    <!-- All weather parameters -->
+    <section class="params-panel" aria-label="All weather parameters">
+      <h2>Current Conditions</h2>
+      <div class="params-grid" id="params-grid"></div>
+    </section>
+
+    <!-- 5-day forecast -->
+    <section aria-label="5-day forecast">
+      <h2>5-Day Forecast</h2>
+      <div class="forecast" id="forecast-cards"></div>
+    </section>
+
+    <!-- Map view -->
+    <section class="map-panel" aria-label="Map view">
+      <div class="map-head">
+        <p class="map-title">Map view</p>
+        <div class="map-controls">
+          <button id="zoom-out" class="chip" type="button" title="Zoom out">−</button>
+          <span class="zoom-label" id="zoom-level">Zoom 11</span>
+          <button id="zoom-in" class="chip" type="button" title="Zoom in">+</button>
+        </div>
+        <div class="map-tabs" id="map-tabs">
+          <button type="button" class="map-tab" data-provider="google">Google</button>
+          <button type="button" class="map-tab" data-provider="openstreet">OpenStreet</button>
+          <button type="button" class="map-tab" data-provider="bhuvan">Bhuvan</button>
+          <button type="button" class="map-tab" data-provider="aerial">Aerial</button>
+        </div>
+      </div>
+      <iframe id="map-frame" class="map-frame" title="City map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <p class="map-link">Blocked? <a id="map-open-link" href="#" target="_blank" rel="noopener noreferrer">Open map in new tab ↗</a></p>
+    </section>
+
+    <p class="status" id="status"></p>
+  </section>
+</main>
+
+<script>
+  /* ── Fallback data ── */
+  const fallbackData = {
+    city: "Tokyo, Japan", latitude: 35.6762, longitude: 139.6503,
+    current: {
+      temperature_2m: 27.4, apparent_temperature: 30.1,
+      relative_humidity_2m: 72, dew_point_2m: 20.5,
+      precipitation: 0, rain: 0, showers: 0, snowfall: 0,
+      weather_code: 1, cloud_cover: 15,
+      surface_pressure: 1012.3,
+      wind_speed_10m: 12, wind_direction_10m: 220, wind_gusts_10m: 18,
+      visibility: 16000, uv_index: 5.2, is_day: 1
+    },
+    daily: {
+      time:                          ["2026-07-29","2026-07-30","2026-07-31","2026-08-01","2026-08-02"],
+      weather_code:                  [1, 2, 61, 80, 3],
+      temperature_2m_max:            [31, 32, 30, 29, 30],
+      temperature_2m_min:            [25, 26, 25, 24, 25],
+      apparent_temperature_max:      [34, 35, 33, 32, 33],
+      apparent_temperature_min:      [27, 28, 27, 26, 27],
+      sunrise:                       ["2026-07-29T04:47","2026-07-30T04:48","2026-07-31T04:49","2026-08-01T04:50","2026-08-02T04:51"],
+      sunset:                        ["2026-07-29T18:52","2026-07-30T18:51","2026-07-31T18:50","2026-08-01T18:48","2026-08-02T18:47"],
+      uv_index_max:                  [8, 7, 6, 8, 7],
+      precipitation_sum:             [0, 0, 5, 10, 2],
+      precipitation_probability_max: [5, 10, 60, 80, 30],
+      wind_speed_10m_max:            [15, 18, 22, 20, 16],
+      wind_gusts_10m_max:            [22, 26, 35, 30, 24],
+      wind_direction_10m_dominant:   [220, 210, 190, 200, 230]
+    }
+  };
+
+  /* ── Weather style map ── */
+  const weatherStyles = [
+    { test: c=>[0,1].includes(c),              label:"Clear",        accent:"#f59e0b", icon:"☀️",  anim:"anim-float" },
+    { test: c=>[2].includes(c),                label:"Partly cloudy",accent:"#f97316", icon:"🌤️",  anim:"anim-drift" },
+    { test: c=>[3,45,48].includes(c),          label:"Cloudy",       accent:"#64748b", icon:"☁️",  anim:"anim-drift" },
+    { test: c=>[51,53,55,56,57].includes(c),   label:"Drizzle",      accent:"#0ea5e9", icon:"🌦️",  anim:"anim-rain"  },
+    { test: c=>[61,63,65,66,67,80,81,82].includes(c), label:"Rain",  accent:"#2563eb", icon:"🌧️",  anim:"anim-rain"  },
+    { test: c=>[71,73,75,77,85,86].includes(c),label:"Snow",         accent:"#38bdf8", icon:"🌨️",  anim:"anim-snow"  },
+    { test: c=>[95,96,99].includes(c),         label:"Thunderstorm", accent:"#7c3aed", icon:"⛈️",  anim:"anim-storm" }
+  ];
+
+  /* ── Storage keys ── */
+  const UNIT_KEY      = "weather-unit";
+  const RECENT_KEY    = "weather-recent-v1";
+  const MAP_KEY       = "weather-map-provider";
+  const ZOOM_KEY      = "weather-map-zoom";
+  const CACHE_KEY     = "weather-cache-v2";
+  const ARCHIVE_KEY   = "weather-archive-cache-v1";
+  const CACHE_TTL     = 10 * 60 * 1000;
+  const ARCHIVE_TTL   = 24 * 60 * 60 * 1000;
+  const MAX_RECENT    = 6;
+
+  /* ── DOM refs ── */
+  const $id = id => document.getElementById(id);
+  const cityNameEl      = $id("city-name");
+  const currentIconEl   = $id("current-icon");
+  const currentTempEl   = $id("current-temp");
+  const currentSummaryEl= $id("current-summary");
+  const paramsGrid      = $id("params-grid");
+  const forecastCards   = $id("forecast-cards");
+  const statusEl        = $id("status");
+  const searchForm      = $id("search-form");
+  const cityInput       = $id("city-input");
+  const locationBtn     = $id("location-btn");
+  const recentEl        = $id("recent-searches");
+  const unitCBtn        = $id("unit-c");
+  const unitFBtn        = $id("unit-f");
+  const exportFastBtn   = $id("export-fast");
+  const exportDailyBtn  = $id("export-daily");
+  const exportMonthlyBtn= $id("export-monthly");
+  const exportAnnualBtn = $id("export-annual");
+  const digipinBtn      = $id("digipin-btn");
+  const digipinValueEl  = $id("digipin-value");
+  const locationAccEl   = $id("location-accuracy");
+  const accuracyScoreEl = $id("accuracy-score");
+  const mapTabsEl       = $id("map-tabs");
+  const mapFrame        = $id("map-frame");
+  const mapOpenLink     = $id("map-open-link");
+  const zoomInBtn       = $id("zoom-in");
+  const zoomOutBtn      = $id("zoom-out");
+  const zoomLevelEl     = $id("zoom-level");
+
+  /* ── State ── */
+  let selectedUnit      = localStorage.getItem(UNIT_KEY) === "F" ? "F" : "C";
+  let recentCities      = safeParse(localStorage.getItem(RECENT_KEY), []);
+  let selectedMap       = localStorage.getItem(MAP_KEY) || "google";
+  let mapZoom           = Number(localStorage.getItem(ZOOM_KEY)) || 11;
+  let latestWeather     = null;
+  let latestGpsAccuracy = null;
+  let latestSourceType  = "live";
+  const geocodeCache    = new Map();
+  let weatherCache      = safeParse(localStorage.getItem(CACHE_KEY), {});
+  let archiveCache      = safeParse(localStorage.getItem(ARCHIVE_KEY), {});
+
+  /* ── Helpers ── */
+  function safeParse(v, fb) {
+    try { const p = JSON.parse(v); return p && typeof p === "object" ? p : fb; } catch { return fb; }
+  }
+  const cToF = c => (c * 9 / 5) + 32;
+  function tempText(c) {
+    return `${Math.round(selectedUnit === "F" ? cToF(c) : c)}°${selectedUnit}`;
+  }
+  function toISODate(d) { return d.toISOString().slice(0, 10); }
+  function slug(t) { return t.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"") || "weather"; }
+  function csvEsc(v) { const t=String(v??""); return /[",\n]/.test(t)?`"${t.replace(/"/g,'""')}"`:t; }
+  const asDay = iso => new Date(iso+"T12:00:00").toLocaleDateString(undefined,{weekday:"short"});
+  const asTime = iso => { if(!iso) return "--"; const d=new Date(iso); return d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}); };
+  const weatherFor = code => weatherStyles.find(s=>s.test(code)) || {label:"Weather",accent:"#3b82f6",icon:"🌡️",anim:"anim-float"};
+
+  function windDir(deg) {
+    const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+    return dirs[Math.round(deg/22.5)%16];
+  }
+  function uvLabel(uv) {
+    if(uv<3) return "Low"; if(uv<6) return "Moderate";
+    if(uv<8) return "High"; if(uv<11) return "Very High"; return "Extreme";
+  }
+  function visibilityText(m) {
+    if(m==null) return "--";
+    return m >= 1000 ? `${(m/1000).toFixed(1)} km` : `${Math.round(m)} m`;
+  }
+  function pressureText(hpa) { return `${Math.round(hpa)} hPa`; }
+  function hexToRgba(hex,a) {
+    const v=hex.replace("#",""), f=v.length===3?v.split("").map(c=>c+c).join(""):v;
+    const n=parseInt(f,16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+  }
+
+  /* ── Accent / theme ── */
+  function setAccent(code) {
+    const {accent} = weatherFor(code);
+    document.documentElement.style.setProperty("--accent", accent);
+    document.documentElement.style.setProperty("--accent-soft", hexToRgba(accent, 0.14));
+  }
+
+  /* ── Accuracy ── */
+  function gpsAccuracyScore(m) {
+    if(!Number.isFinite(m)) return null;
+    if(m<=20) return 100; if(m<=50) return 92; if(m<=100) return 82; if(m<=250) return 72; return 60;
+  }
+  function dataSourceScore(src) { return src==="live"?100:src==="cached"?86:62; }
+  function updateAccuracyView() {
+    const ss = dataSourceScore(latestSourceType);
+    const gs = gpsAccuracyScore(latestGpsAccuracy);
+    const score = gs==null ? ss : Math.round(ss*0.6 + gs*0.4);
+    const label = latestSourceType==="live"?"Live":latestSourceType==="cached"?"Cached":"Fallback";
+    accuracyScoreEl.textContent = `Accuracy: ${score}% (${label})`;
+    locationAccEl.textContent = latestGpsAccuracy ? `GPS: ±${Math.round(latestGpsAccuracy)}m` : "GPS: --";
+  }
+
+  /* ── Cache ── */
+  function cityKey(c) { return `city:${c.trim().toLowerCase()}`; }
+  function coordKey(lat, lon) { return `coords:${Number(lat).toFixed(3)},${Number(lon).toFixed(3)}`; }
+  function archKey(lat,lon,s,e) { return `${coordKey(lat,lon)}:${s}:${e}`; }
+  function getW(key) { const e=weatherCache[key]; if(!e||Date.now()-e.ts>CACHE_TTL) return null; return e.d; }
+  function setW(key,d) { weatherCache[key]={ts:Date.now(),d}; localStorage.setItem(CACHE_KEY,JSON.stringify(weatherCache)); }
+  function getA(key) { const e=archiveCache[key]; if(!e||Date.now()-e.ts>ARCHIVE_TTL) return null; return e.rows; }
+  function setA(key,rows) { archiveCache[key]={ts:Date.now(),rows}; localStorage.setItem(ARCHIVE_KEY,JSON.stringify(archiveCache)); }
+
+  /* ── Render params grid ── */
+  const PARAM_DEFS = [
+    { key:"apparent_temperature", icon:"🌡️", label:"Feels like",    fmt: v=>tempText(v) },
+    { key:"relative_humidity_2m", icon:"💧", label:"Humidity",      fmt: v=>`${v}%` },
+    { key:"dew_point_2m",         icon:"🌫️", label:"Dew point",     fmt: v=>tempText(v) },
+    { key:"wind_speed_10m",       icon:"💨", label:"Wind speed",    fmt: v=>`${Math.round(v)} km/h`, sub: d=>windDir(d.wind_direction_10m) },
+    { key:"wind_gusts_10m",       icon:"🌪️", label:"Wind gusts",    fmt: v=>`${Math.round(v)} km/h` },
+    { key:"wind_direction_10m",   icon:"🧭", label:"Wind dir",      fmt: v=>`${Math.round(v)}° ${windDir(v)}` },
+    { key:"surface_pressure",     icon:"🔵", label:"Pressure",      fmt: v=>pressureText(v) },
+    { key:"visibility",           icon:"👁️", label:"Visibility",    fmt: v=>visibilityText(v) },
+    { key:"cloud_cover",          icon:"☁️", label:"Cloud cover",   fmt: v=>`${v}%` },
+    { key:"uv_index",             icon:"🌞", label:"UV index",      fmt: v=>`${v.toFixed(1)} · ${uvLabel(v)}` },
+    { key:"precipitation",        icon:"🌂", label:"Precipitation", fmt: v=>`${v} mm` },
+    { key:"rain",                 icon:"🌧️", label:"Rain",          fmt: v=>`${v} mm` },
+    { key:"showers",              icon:"🚿", label:"Showers",       fmt: v=>`${v} mm` },
+    { key:"snowfall",             icon:"❄️", label:"Snowfall",      fmt: v=>`${v} cm` },
+    { key:"is_day",               icon:"🌓", label:"Day / Night",   fmt: v=>v===1?"Daytime":"Nighttime" }
+  ];
+
+  function renderParamsGrid(current) {
+    paramsGrid.innerHTML = "";
+    PARAM_DEFS.forEach(({key, icon, label, fmt, sub}) => {
+      const val = current[key];
+      if(val==null) return;
+      const tile = document.createElement("div");
+      tile.className = "tile";
+      const subText = sub ? sub(current) : "";
+      tile.innerHTML = `
+        <span class="tile-icon">${icon}</span>
+        <span class="tile-label">${label}</span>
+        <p class="tile-value">${fmt(val)}</p>
+        ${subText ? `<span class="tile-sub">${subText}</span>` : ""}
+      `;
+      paramsGrid.appendChild(tile);
+    });
+    // Sunrise / Sunset from daily[0]
+    if(latestWeather && latestWeather.daily.sunrise) {
+      ["sunrise","sunset"].forEach((k,i) => {
+        const iso = latestWeather.daily[k]?.[0];
+        const tile = document.createElement("div");
+        tile.className = "tile";
+        tile.innerHTML = `
+          <span class="tile-icon">${i===0?"🌅":"🌇"}</span>
+          <span class="tile-label">${i===0?"Sunrise":"Sunset"}</span>
+          <p class="tile-value">${asTime(iso)}</p>
+        `;
+        paramsGrid.appendChild(tile);
+      });
+    }
+  }
+
+  /* ── Render weather ── */
+  function renderWeather(data) {
+    latestWeather = data;
+    const c = data.current;
+    cityNameEl.textContent = data.city;
+    currentTempEl.textContent = tempText(c.temperature_2m);
+    const style = weatherFor(c.weather_code);
+    currentSummaryEl.textContent = style.label;
+    currentIconEl.textContent = style.icon;
+    currentIconEl.className = `weather-icon ${style.anim}`;
+    setAccent(c.weather_code);
+    renderParamsGrid(c);
+    updateAccuracyView();
+    updateMap(data);
+
+    // 5-day forecast
+    forecastCards.innerHTML = "";
+    data.daily.time.slice(0,5).forEach((date,i) => {
+      const code = data.daily.weather_code[i];
+      const ws = weatherFor(code);
+      const precipPct = data.daily.precipitation_probability_max?.[i];
+      const uvMax     = data.daily.uv_index_max?.[i];
+      const precipSum = data.daily.precipitation_sum?.[i];
+      const card = document.createElement("article");
+      card.className = "card";
+      card.innerHTML = `
+        <p class="day">${asDay(date)}</p>
+        <span class="icon ${ws.anim}" aria-hidden="true">${ws.icon}</span>
+        <p>${ws.label}</p>
+        <p class="range">${tempText(data.daily.temperature_2m_max[i])} / ${tempText(data.daily.temperature_2m_min[i])}</p>
+        ${precipPct!=null?`<p class="card-meta">🌂 ${precipPct}%</p>`:""}
+        ${uvMax!=null?`<p class="card-meta">UV ${uvMax} · ${uvLabel(uvMax)}</p>`:""}
+        ${precipSum>0?`<p class="card-meta">☔ ${precipSum} mm</p>`:""}
+        <p class="card-meta">${asTime(data.daily.sunrise?.[i])} – ${asTime(data.daily.sunset?.[i])}</p>
+      `;
+      forecastCards.appendChild(card);
+    });
+  }
+
+  /* ── Unit toggle ── */
+  function renderUnitToggle() {
+    unitCBtn.classList.toggle("active", selectedUnit==="C");
+    unitFBtn.classList.toggle("active", selectedUnit==="F");
+  }
+  function setUnit(u) {
+    selectedUnit = u;
+    localStorage.setItem(UNIT_KEY, u);
+    renderUnitToggle();
+    if(latestWeather) renderWeather(latestWeather);
+  }
+
+  /* ── Recent cities ── */
+  function saveRecent(city) {
+    recentCities = [city, ...recentCities.filter(c=>c.toLowerCase()!==city.toLowerCase())].slice(0,MAX_RECENT);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recentCities));
+    renderRecent();
+  }
+  function renderRecent() {
+    recentEl.innerHTML = "";
+    recentCities.forEach(city => {
+      const chip = document.createElement("button");
+      chip.type="button"; chip.className="chip"; chip.textContent=city;
+      chip.addEventListener("click", ()=>loadCity(city));
+      recentEl.appendChild(chip);
+    });
+  }
+
+  /* ── Map ── */
+  function mapUrl(provider, lat, lon) {
+    const d = Math.max(0.004, 140/Math.pow(2,mapZoom));
+    const urls = {
+      google:     `https://www.google.com/maps?q=${lat},${lon}&z=${mapZoom}&output=embed`,
+      openstreet: `https://www.openstreetmap.org/export/embed.html?bbox=${lon-d},${lat-d},${lon+d},${lat+d}&layer=mapnik&marker=${lat},${lon}`,
+      bhuvan:     `https://bhuvan.nrsc.gov.in/home/index.php`,
+      aerial:     `https://www.google.com/maps?q=${lat},${lon}&z=${mapZoom}&t=k&output=embed`
+    };
+    return urls[provider]||urls.google;
+  }
+  function renderMapTabs() {
+    mapTabsEl.querySelectorAll(".map-tab").forEach(t=>t.classList.toggle("active",t.dataset.provider===selectedMap));
+  }
+  function updateMap(data) {
+    const url = mapUrl(selectedMap, data.latitude, data.longitude);
+    if(mapFrame.src!==url) mapFrame.src=url;
+    mapOpenLink.href=url;
+    zoomLevelEl.textContent=`Zoom ${mapZoom}`;
+    renderMapTabs();
+  }
+  function setMapProvider(p) { selectedMap=p; localStorage.setItem(MAP_KEY,p); if(latestWeather) updateMap(latestWeather); }
+  function changeZoom(step) {
+    mapZoom=Math.min(18,Math.max(3,mapZoom+step));
+    localStorage.setItem(ZOOM_KEY,String(mapZoom));
+    if(latestWeather) updateMap(latestWeather); else zoomLevelEl.textContent=`Zoom ${mapZoom}`;
+  }
+
+  /* ── API params ── */
+  const CURRENT_PARAMS = [
+    "temperature_2m","apparent_temperature","relative_humidity_2m","dew_point_2m",
+    "precipitation","rain","showers","snowfall","weather_code","cloud_cover",
+    "surface_pressure","wind_speed_10m","wind_direction_10m","wind_gusts_10m",
+    "visibility","uv_index","is_day"
+  ].join(",");
+  const DAILY_PARAMS = [
+    "weather_code","temperature_2m_max","temperature_2m_min",
+    "apparent_temperature_max","apparent_temperature_min",
+    "sunrise","sunset","uv_index_max",
+    "precipitation_sum","precipitation_probability_max",
+    "wind_speed_10m_max","wind_gusts_10m_max","wind_direction_10m_dominant"
+  ].join(",");
+
+  function weatherEndpoint(lat, lon) {
+    return `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${CURRENT_PARAMS}&daily=${DAILY_PARAMS}&forecast_days=5&timezone=auto`;
+  }
+
+  /* ── Geocoding ── */
+  async function geocodeCity(city) {
+    const k = city.trim().toLowerCase();
+    if(geocodeCache.has(k)) return geocodeCache.get(k);
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+    if(!res.ok) throw new Error("Geocode failed.");
+    const p = await res.json();
+    if(!p.results?.length) throw new Error("City not found.");
+    geocodeCache.set(k, p.results[0]);
+    return p.results[0];
+  }
+  async function reverseGeocode(lat, lon) {
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&format=json`);
+    if(!res.ok) return null;
+    const p = await res.json();
+    return p.results?.[0] || null;
+  }
+
+  /* ── Fetch weather ── */
+  async function getWeatherByCity(city) {
+    const place = await geocodeCity(city);
+    const res = await fetch(weatherEndpoint(place.latitude, place.longitude));
+    if(!res.ok) throw new Error("Weather request failed.");
+    const p = await res.json();
+    return { city:`${place.name}${place.country?`, ${place.country}`:""}`, latitude:place.latitude, longitude:place.longitude, current:p.current, daily:p.daily };
+  }
+  async function getWeatherByCoords(lat, lon, label) {
+    const [place, payload] = await Promise.all([
+      reverseGeocode(lat, lon),
+      fetch(weatherEndpoint(lat, lon)).then(r=>{ if(!r.ok) throw new Error("Weather request failed."); return r.json(); })
+    ]);
+    const city = label || (place?`${place.name}${place.country?`, ${place.country}`:""}` : "Your location");
+    return { city, latitude:lat, longitude:lon, current:payload.current, daily:payload.daily };
+  }
+
+  /* ── Load city ── */
+  async function loadCity(city, allowFallback=true) {
+    statusEl.textContent = "Loading live weather…";
+    const key = cityKey(city);
+    const cached = getW(key);
+    if(cached) { latestSourceType="cached"; renderWeather(cached); statusEl.textContent="Showing cached data, refreshing…"; }
+    try {
+      const data = await getWeatherByCity(city);
+      latestSourceType = "live"; renderWeather(data); saveRecent(data.city); setW(key, data);
+      statusEl.textContent = `Live data from Open-Meteo · ${new Date().toLocaleTimeString()}`;
+    } catch(err) {
+      if(cached) { latestSourceType="cached"; statusEl.textContent="Live fetch failed. Showing cached data."; return; }
+      if(allowFallback) { latestSourceType="fallback"; renderWeather(fallbackData); statusEl.textContent="Live fetch failed. Showing fallback data."; }
+      else statusEl.textContent = err.message;
+    }
+  }
+
+  /* ── Load location ── */
+  async function loadCurrentLocation() {
+    if(!navigator.geolocation) { statusEl.textContent="Geolocation not supported."; return; }
+    statusEl.textContent = "Getting your location…";
+    try {
+      const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:10000}));
+      const {latitude:lat, longitude:lon, accuracy} = pos.coords;
+      latestGpsAccuracy = accuracy;
+      const key = coordKey(lat, lon);
+      const cached = getW(key);
+      if(cached) { latestSourceType="cached"; renderWeather(cached); statusEl.textContent="Showing cached location data, refreshing…"; }
+      const data = await getWeatherByCoords(lat, lon);
+      latestSourceType = "live"; renderWeather(data); saveRecent(data.city); setW(key, data);
+      statusEl.textContent = `Live data from Open-Meteo · ${new Date().toLocaleTimeString()}`;
+    } catch {
+      latestGpsAccuracy = null;
+      const fb = latestWeather ? getW(coordKey(latestWeather.latitude, latestWeather.longitude)) : null;
+      if(fb) { latestSourceType="cached"; renderWeather(fb); statusEl.textContent="Could not refresh. Showing cached data."; }
+      else   { latestSourceType="fallback"; renderWeather(fallbackData); statusEl.textContent="Could not fetch location weather. Showing fallback data."; }
+    }
+  }
+
+  /* ── DigiPIN ── */
+  async function fetchDigipin(lat, lon) {
+    const endpoint = `/api/digipin/encode?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}`;
+    const res = await fetch(endpoint);
+    if(!res.ok) throw new Error("DigiPIN request failed.");
+    const p = await res.json();
+    return typeof p==="string" ? p : p.digipin||p.code||p.data?.digipin||JSON.stringify(p);
+  }
+  async function handleDigipin() {
+    const lat = latestWeather ? latestWeather.latitude : 13.11179621;
+    const lon = latestWeather ? latestWeather.longitude : 80.20264269;
+    digipinValueEl.textContent = "DigiPIN: Loading…";
+    try {
+      const code = await fetchDigipin(lat, lon);
+      digipinValueEl.textContent = `DigiPIN: ${code}`;
+    } catch {
+      digipinValueEl.textContent = `DigiPIN: unavailable (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+    }
+  }
+
+  /* ── Export CSV ── */
+  function downloadCsv(filename, cols, rows) {
+    if(!rows || !rows.length) throw new Error("No rows to export.");
+    const csv = [cols.join(","), ...rows.map(r=>cols.map(c=>csvEsc(r[c])).join(","))].join("\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+
+    // Prefer the IE/Edge legacy API when present (some embedded webviews expose it).
+    if (typeof navigator !== "undefined" && navigator.msSaveOrOpenBlob) {
+      navigator.msSaveOrOpenBlob(blob, filename);
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 2000);
+  }
+
+  function dailyRows(data) {
+    return data.daily.time.map((date,i)=>({
+      date, city:data.city, latitude:data.latitude, longitude:data.longitude,
+      weather_code: data.daily.weather_code[i],
+      weather: weatherFor(data.daily.weather_code[i]).label,
+      max_c: data.daily.temperature_2m_max[i],
+      min_c: data.daily.temperature_2m_min[i],
+      apparent_max_c: data.daily.apparent_temperature_max?.[i]??"",
+      apparent_min_c: data.daily.apparent_temperature_min?.[i]??"",
+      sunrise: data.daily.sunrise?.[i]??"",
+      sunset:  data.daily.sunset?.[i]??"",
+      uv_index_max: data.daily.uv_index_max?.[i]??"",
+      precipitation_mm: data.daily.precipitation_sum?.[i]??"",
+      precipitation_prob_pct: data.daily.precipitation_probability_max?.[i]??"",
+      wind_speed_max_kmh: data.daily.wind_speed_10m_max?.[i]??"",
+      wind_gusts_max_kmh: data.daily.wind_gusts_10m_max?.[i]??"",
+      wind_dir_dominant: data.daily.wind_direction_10m_dominant?.[i]??""
+    }));
+  }
+
+  const DAILY_COLS = ["date","city","latitude","longitude","weather_code","weather",
+    "max_c","min_c","apparent_max_c","apparent_min_c","sunrise","sunset",
+    "uv_index_max","precipitation_mm","precipitation_prob_pct",
+    "wind_speed_max_kmh","wind_gusts_max_kmh","wind_dir_dominant"];
+
+  function aggregateRows(rows, keyFn, label) {
+    const g = {};
+    rows.forEach(r => {
+      const k=keyFn(r.date);
+      if(!g[k]) g[k]={bucket:k,maxSum:0,minSum:0,precipSum:0,days:0};
+      g[k].maxSum+=Number(r.max_c||0); g[k].minSum+=Number(r.min_c||0);
+      g[k].precipSum+=Number(r.precipitation_mm||0); g[k].days++;
+    });
+    return Object.values(g).map(item=>({
+      period_type:label, period:item.bucket,
+      avg_max_c:(item.maxSum/item.days).toFixed(1),
+      avg_min_c:(item.minSum/item.days).toFixed(1),
+      total_precip_mm:item.precipSum.toFixed(1), days:item.days
+    }));
+  }
+  const AGG_COLS = ["period_type","period","avg_max_c","avg_min_c","total_precip_mm","days"];
+
+  async function fetchArchiveRows(lat, lon, start, end) {
+    const k = archKey(lat, lon, start, end);
+    const cached = getA(k);
+    if(cached) return cached;
+    const params = "temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum";
+    const res = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${start}&end_date=${end}&daily=${params}&timezone=auto`);
+    if(!res.ok) throw new Error("Archive request failed.");
+    const p = await res.json();
+    const rows = p.daily.time.map((date,i)=>({
+      date, max_c:p.daily.temperature_2m_max[i], min_c:p.daily.temperature_2m_min[i],
+      precipitation_mm:p.daily.precipitation_sum[i], weather_code:p.daily.weather_code[i]
+    }));
+    setA(k, rows); return rows;
+  }
+
+  function exportDailyCsv() {
+    if(!latestWeather) { statusEl.textContent="No weather data loaded yet — please wait or search a city first."; return; }
+    try {
+      downloadCsv(`${slug(latestWeather.city)}-daily.csv`, DAILY_COLS, dailyRows(latestWeather));
+      statusEl.textContent="Daily export downloaded.";
+    } catch(err) {
+      statusEl.textContent = `Daily export failed: ${err.message}`;
+    }
+  }
+  async function exportMonthlyCsv() {
+    if(!latestWeather) { statusEl.textContent="No weather data loaded yet — please wait or search a city first."; return; }
+    statusEl.textContent="Preparing monthly export…";
+    const end=new Date(), start=new Date(); start.setMonth(end.getMonth()-12);
+    let rows;
+    try { rows=await fetchArchiveRows(latestWeather.latitude,latestWeather.longitude,toISODate(start),toISODate(end)); }
+    catch { rows=dailyRows(latestWeather); }
+    try {
+      downloadCsv(`${slug(latestWeather.city)}-monthly.csv`, AGG_COLS, aggregateRows(rows,d=>d.slice(0,7),"monthly"));
+      statusEl.textContent="Monthly export downloaded.";
+    } catch(err) {
+      statusEl.textContent = `Monthly export failed: ${err.message}`;
+    }
+  }
+  async function exportAnnualCsv() {
+    if(!latestWeather) { statusEl.textContent="No weather data loaded yet — please wait or search a city first."; return; }
+    statusEl.textContent="Preparing annual export…";
+    const end=new Date(), start=new Date(); start.setFullYear(end.getFullYear()-5);
+    let rows;
+    try { rows=await fetchArchiveRows(latestWeather.latitude,latestWeather.longitude,toISODate(start),toISODate(end)); }
+    catch { rows=dailyRows(latestWeather); }
+    try {
+      downloadCsv(`${slug(latestWeather.city)}-annual.csv`, AGG_COLS, aggregateRows(rows,d=>d.slice(0,4),"annual"));
+      statusEl.textContent="Annual export downloaded.";
+    } catch(err) {
+      statusEl.textContent = `Annual export failed: ${err.message}`;
+    }
+  }
+  async function exportFastCsv() {
+    if(!latestWeather) { statusEl.textContent="No weather data loaded yet — please wait or search a city first."; return; }
+    statusEl.textContent="Fast export starting…";
+    exportDailyCsv();
+    const end=new Date();
+    const mStart=new Date(); mStart.setMonth(end.getMonth()-12);
+    const yStart=new Date(); yStart.setFullYear(end.getFullYear()-5);
+    try {
+      const [mRows, yRows] = await Promise.all([
+        fetchArchiveRows(latestWeather.latitude,latestWeather.longitude,toISODate(mStart),toISODate(end)),
+        fetchArchiveRows(latestWeather.latitude,latestWeather.longitude,toISODate(yStart),toISODate(end))
+      ]);
+      downloadCsv(`${slug(latestWeather.city)}-monthly.csv`, AGG_COLS, aggregateRows(mRows,d=>d.slice(0,7),"monthly"));
+      downloadCsv(`${slug(latestWeather.city)}-annual.csv`,  AGG_COLS, aggregateRows(yRows,d=>d.slice(0,4),"annual"));
+      statusEl.textContent="Fast export complete: daily + monthly + annual downloaded.";
+    } catch(err) {
+      statusEl.textContent = `Archive fetch failed (${err.message}). Falling back to forecast-based estimates…`;
+      await exportMonthlyCsv();
+      await exportAnnualCsv();
+    }
+  }
+
+  /* ── Event listeners ── */
+  searchForm.addEventListener("submit", e=>{ e.preventDefault(); const c=cityInput.value.trim(); if(c) loadCity(c); });
+  locationBtn.addEventListener("click", loadCurrentLocation);
+  unitCBtn.addEventListener("click", ()=>setUnit("C"));
+  unitFBtn.addEventListener("click", ()=>setUnit("F"));
+  exportFastBtn.addEventListener("click",    () => Promise.resolve(exportFastCsv()).catch(err => statusEl.textContent = `Export failed: ${err.message}`));
+  exportDailyBtn.addEventListener("click",   () => { try { exportDailyCsv(); } catch(err) { statusEl.textContent = `Export failed: ${err.message}`; } });
+  exportMonthlyBtn.addEventListener("click", () => Promise.resolve(exportMonthlyCsv()).catch(err => statusEl.textContent = `Export failed: ${err.message}`));
+  exportAnnualBtn.addEventListener("click",  () => Promise.resolve(exportAnnualCsv()).catch(err => statusEl.textContent = `Export failed: ${err.message}`));
+  digipinBtn.addEventListener("click", handleDigipin);
+  zoomInBtn.addEventListener("click",  ()=>changeZoom(1));
+  zoomOutBtn.addEventListener("click", ()=>changeZoom(-1));
+  mapTabsEl.addEventListener("click", e=>{ const b=e.target.closest(".map-tab"); if(b) setMapProvider(b.dataset.provider); });
+
+  /* ── Boot ── */
+  renderUnitToggle();
+  renderRecent();
+  renderMapTabs();
+  zoomLevelEl.textContent = `Zoom ${mapZoom}`;
+  loadCity("Tokyo");
+</script>
+</body>
+</html>
